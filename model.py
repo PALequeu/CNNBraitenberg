@@ -7,10 +7,12 @@ from torchviz import make_dot
 
 
 class Linear_QNet(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
+    def __init__(self, input_size, hidden_size, output_size, new):
         super().__init__()
         self.linear1 = nn.Linear(input_size, hidden_size)
         self.linear2 = nn.Linear(hidden_size, output_size)
+        if not new:
+            self.load_state_dict(torch.load("./model/model.pth"))
 
     # forward pass
     def forward(self, x):

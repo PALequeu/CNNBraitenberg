@@ -37,7 +37,12 @@ class Robot:
         self.min_obj_dist = 100
         self.countdown = 5
 
-    def move_braitenberg(self, detection, command=[0, 0], isInLoop=False):
+    def move_braitenberg(
+        self,
+        detection,
+        isInLoop,
+        command=[0, 0],
+    ):
         # command array
         new_command = [0, 0]
 
@@ -59,26 +64,28 @@ class Robot:
             # removing the 0 values from the detection list
             detectionWithoutZero = [x for x in detection_without_extrem if x != 0]
             minDetection = min(detectionWithoutZero, default=Inf)
-            print(minDetection)
+            # print(minDetection)
             if minDetection > 10:
                 print("out of loop")
                 isInLoop = False
             # self.vl = command[0]
             # self.vr = command[1]
+            print("command in loop", command)
             return command, isInLoop
 
-        command = [self.minspeed, self.minspeed]
+        # new_command = [self.minspeed, self.minspeed]
 
         for i in range(10):
             if detection[i] != 0:
-                new_command[0] += braitenbergL[i] * 2000 * exp(-detection[i])
-                new_command[1] += braitenbergR[i] * 2000 * exp(-detection[i])
+                new_command[0] += braitenbergL[i] * 1000 * exp(-detection[i])
+                new_command[1] += braitenbergR[i] * 1000 * exp(-detection[i])
 
         detectionWithoutZero = [x for x in detection if x != 0]
         minDetection = min(detectionWithoutZero, default=Inf)
 
         if minDetection < 5:
             isInLoop = True
+            print("in loop")
             minIndex = detection.index(minDetection)
             if minIndex < 4:
                 command[0] = -8
@@ -86,12 +93,14 @@ class Robot:
             else:
                 command[0] = 8
                 command[1] = -8
+            return command, isInLoop
 
         # self.vl = command[0]
         # self.vr = command[1]
 
         # print(command)
-        return command, isInLoop
+
+        return new_command, isInLoop
 
     def kinematics(self, dt):
         # equations cinematiques du robot

@@ -4,6 +4,7 @@ from mapGenerator import generate_map
 from collections import namedtuple
 from robot import Robot, Graphics, UltraSonic, MAXSPEED
 import numpy as np
+import matplotlib.pyplot as plt
 
 pygame.init()
 font = pygame.font.Font("arial.ttf", 25)
@@ -19,13 +20,13 @@ def distance(p1, p2):
 
 
 class RobotGame:
-    def __init__(self, w=1400, h=600, Empty=False):
+    def __init__(self, training, w=1400, h=600, Empty=False):
         self.w = w
         self.h = h
         self.sensor_range = 200, np.radians(60)
-        self.reset()
+        self.reset(training)
 
-    def reset(self):
+    def reset(self, training):
         self.score = 0
         self.target = None
         self._place_target()
@@ -34,14 +35,14 @@ class RobotGame:
         self.frame_iteration = 0
         self.start_ticks = pygame.time.get_ticks()
         self.clock = pygame.time.Clock()
-        self.map = generate_map(
-            self.w,
-            self.h,
-            self.target,
-        )
+        self.seconds_array = []
+        self.vl_array = []
+        self.vr_array = []
+
+        self.map = generate_map(self.w, self.h, self.target, training)
         self.gfx = Graphics((self.w, self.h), "robot.png", "test_map.png")
         self.gfx.draw_robot(self.robot.x, self.robot.y, self.robot.heading)
-        self.ultrasonic = UltraSonic(self.sensor_range, self.map)
+        self.ultrasonic = UltraSonic(self.sensor_range, self.gfx.map)
 
     def _place_target(self):
         x = random.randint(200, (self.w - 40))
@@ -79,12 +80,9 @@ class RobotGame:
         dist = distance(self.robot, self.target)
 
         # reward for getting closer to target
-        closer_reward = (last_distance - dist) * 10 - 3  # penalize for staying put
+        closer_reward = (last_distance - dist) * 10 - 3  # - 3 penalize for staying put
 
-        # reward for being close to target
-        # close_reward = (self.initial_distance - dist) / self.initial_distance * 10
-
-        # penalize the difference between the left and right wheel velocities
+        # penalize the difference between the left and right wheel velocities to avoid spinning on itself
         difference_reward = (
             (abs(self.robot.vl - self.robot.vr)) / self.robot.maxspeed
         ) * 2
@@ -93,12 +91,11 @@ class RobotGame:
         faster_reward = abs((self.robot.vl + self.robot.vr) / 2) / self.robot.maxspeed
 
         reward += closer_reward - difference_reward + faster_reward
-        # print(reward, closer_reward, difference_reward, faster_reward)
-        # print(
-        #     (1 / dist) * 150,
-        #     (abs(self.robot.vl - self.robot.vr)) / self.robot.maxspeed,
-        #     (abs((self.robot.vl + self.robot.vr) / 2)) / self.robot.maxspeed,
-        # )
+
+        self.seconds_array.append(seconds)
+        self.vl_array.append(self.robot.vl)
+        self.vr_array.append(self.robot.vr)
+
         if distance(self.robot, self.target) < 40:
             game_over = True
             reward += 5
@@ -125,8 +122,10 @@ class RobotGame:
 
         return reward, game_over, self.score, dist
 
-    def play_step2(self, action):
+    def play_step2(self, action, isInLoop, counter, command=[0, 0]):
+        game_over = False
         seconds = (pygame.time.get_ticks() - self.start_ticks) / 1000
+        print("seconds", seconds)
         self.frame_iteration += 1
         # 1. collect user input
         for event in pygame.event.get():
@@ -138,31 +137,62 @@ class RobotGame:
         # i dont know if this is needed
         self.gfx.map.blit(self.gfx.map_image, (0, 0))
 
+        self.gfx.draw_robot(self.robot.x, self.robot.y, self.robot.heading)
+
         # 2. find move with CNN
-        CNN_command = self._move2(action)
+
+        CNN_command = self._move2(action)  # command = changes only
 
         # 3. find move with braitenberg
-        print(self.robot.x, self.robot.y, self.robot.heading)
+
         point_cloud, detection = self.ultrasonic.sense_obstacles(
             self.robot.x, self.robot.y, self.robot.heading
         )
-        command, isInLoop = self.robot.move_braitenberg(detection, command, isInLoop)
+
+        command, isInLoop = self.robot.move_braitenberg(detection, isInLoop, command)
         self.gfx.draw_sensor_data(point_cloud)
 
-        Braitenberg_command = command
+        Braitenberg_command = command  # command = changes only
 
         # 4. move with CNN and Braitenberg
-        self.robot.vl = (CNN_command[0] + Braitenberg_command[0]) / 2
-        self.robot.vr = (CNN_command[1] + Braitenberg_command[1]) / 2
-        self.robot.kinematics(SPEED / 10)
+        # print(CNN_command, Braitenberg_command)
+        if isInLoop:
+            # if in loop, only use braitenberg
+            self.robot.vl = Braitenberg_command[0]
+            self.robot.vr = Braitenberg_command[1]
+        else:
+            self.robot.vl = (
+                self.robot.minspeed
+                + 0.4 * Braitenberg_command[0]
+                + 1.3 * CNN_command[0]
+            )
+            self.robot.vr = (
+                self.robot.minspeed
+                + 0.4 * Braitenberg_command[1]
+                + 1.3 * CNN_command[1]
+            )
 
+        self.robot.kinematics(SPEED / 50)
+
+        # print(linspacing)
+        # print(seconds in linspacing)
         # update display
         pygame.display.update()
 
+        if counter == 10:
+            print("nice")
+            self.seconds_array.append(seconds)
+            self.vl_array.append(self.robot.vl)
+            self.vr_array.append(self.robot.vr)
+            counter = 0
+        else:
+            counter += 1
+
         # check if game over
-        if distance(self.robot, self.target) < 40:
+        if distance(self.robot, self.target) < 40 or seconds > 20:
             game_over = True
-            return game_over
+
+        return isInLoop, game_over, counter
 
     def _move(self, action):
         speed = 0.1

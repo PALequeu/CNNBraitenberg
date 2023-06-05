@@ -40,14 +40,14 @@ def distance(p1, p2):
 
 
 class Agent:
-    def __init__(self):
+    def __init__(self, new):
         self.n_games = 0  # number of games played
         self.epsilon = 0  # randomness
         self.gamma = 0.95  # discount rate, must be < 1
         # deque : popleft() if len(memory) > MAX_MEMORY
         self.memory = deque(maxlen=MAX_MEMORY)
         # TODO
-        self.model = Linear_QNet(5, 30, 5)
+        self.model = Linear_QNet(5, 30, 5, new)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
     def get_state(self, game):
@@ -106,13 +106,13 @@ class Agent:
         return final_move
 
 
-def train():
+def train(new=True):
     plot_scores = []
     plot_mean_scores = []
     total_score = 0
     record = -inf
-    agent = Agent()
-    game = RobotGame()
+    agent = Agent(new)
+    game = RobotGame(True, w=600, h=600)
     last_distance = 0
     while True:
         # get old state
@@ -136,7 +136,7 @@ def train():
         if done:
             # train long memory/experience replay
             # it trains on all the previous games done
-            game.reset()
+            game.reset(True)
 
             agent.n_games += 1
             agent.train_long_memory()
@@ -166,28 +166,39 @@ def train():
 
 
 def start():
-    agent = Agent()
-    game = RobotGame()
-    sensor_range = 200, radians(60)
-    # ultrasonic = UltraSonic(sensor_range, game.map)
-    while True:
+    agent = Agent(False)
+    game = RobotGame(False)
+    isInLoop = False
+    running = True
+    counter = 0
+    while running:
         # get state
+
         state = agent.get_state(game)
 
         # get move
         final_move = agent.get_action(state)
-        done = game.play_step2(final_move)
+
+        # perform move
+        isInLoop, done, counter = game.play_step2(final_move, isInLoop, counter)
 
         if done:
-            game.reset()
-            agent.n_games += 1
+            running = False
+
+    return game.seconds_array, game.vl_array, game.vr_array
 
 
 if __name__ == "__main__":
-    # Si l'on veut entainer le robot
+    # if you want to train the model from scratch use train()
+    # if you want to train the model already used use train(False)
     # train()
 
-    # si l'on veut tester le robot
-    start()
-    print("oui")
-    pass
+    # if you want to test the algorithm
+    seconds, vl, vr = start()
+    print(vr)
+    fig, (ax1, ax2) = plt.subplots(2)
+    fig.suptitle("left wheel speed (first) and right wheel speed (second) during time")
+    ax1.plot(seconds, vl)
+    ax2.plot(seconds, vr)
+
+    plt.show(block=True)

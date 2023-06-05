@@ -23,12 +23,6 @@ def generate_map(WIDTH, HEIGHT, target, Empty=False):
             if not (i < 40 or i > HEIGHT - 40 or j < 40 or j > WIDTH - 40):
                 map[i][j] = 255
 
-    print("new target", target)
-    # draw target
-    for i in range(target.x - 5, target.x + 5):
-        for j in range(target.y - 5, target.y + 5):
-            map[j][i] = 150
-
     # draw obstacles
     if not Empty:
         number_of_obstacles = random.randint(5, 8)
@@ -40,6 +34,12 @@ def generate_map(WIDTH, HEIGHT, target, Empty=False):
             for x_id in range(x, x + width):
                 for y_id in range(y, y + height):
                     map[y_id][x_id] = 0
+
+    print("new target", target)
+    # draw target
+    for i in range(target.x - 5, target.x + 5):
+        for j in range(target.y - 5, target.y + 5):
+            map[j][i] = 150
 
     data = im.fromarray(map)
     if data.mode != "RGB":
