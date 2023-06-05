@@ -2,7 +2,7 @@ import pygame
 import random
 from mapGenerator import generate_map
 from collections import namedtuple
-from robot import Robot, Graphics, MAXSPEED
+from robot import Robot, Graphics, UltraSonic, MAXSPEED
 import numpy as np
 
 pygame.init()
@@ -22,6 +22,7 @@ class RobotGame:
     def __init__(self, w=1400, h=600, Empty=False):
         self.w = w
         self.h = h
+        self.sensor_range = 200, np.radians(60)
         self.reset()
 
     def reset(self):
@@ -40,6 +41,7 @@ class RobotGame:
         )
         self.gfx = Graphics((self.w, self.h), "robot.png", "test_map.png")
         self.gfx.draw_robot(self.robot.x, self.robot.y, self.robot.heading)
+        self.ultrasonic = UltraSonic(self.sensor_range, self.map)
 
     def _place_target(self):
         x = random.randint(200, (self.w - 40))
@@ -123,6 +125,45 @@ class RobotGame:
 
         return reward, game_over, self.score, dist
 
+    def play_step2(self, action):
+        seconds = (pygame.time.get_ticks() - self.start_ticks) / 1000
+        self.frame_iteration += 1
+        # 1. collect user input
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                quit()
+        # print("position", self.robot.x, self.robot.y)
+        # print("speed", self.robot.vl, self.robot.vr)
+        # i dont know if this is needed
+        self.gfx.map.blit(self.gfx.map_image, (0, 0))
+
+        # 2. find move with CNN
+        CNN_command = self._move2(action)
+
+        # 3. find move with braitenberg
+        print(self.robot.x, self.robot.y, self.robot.heading)
+        point_cloud, detection = self.ultrasonic.sense_obstacles(
+            self.robot.x, self.robot.y, self.robot.heading
+        )
+        command, isInLoop = self.robot.move_braitenberg(detection, command, isInLoop)
+        self.gfx.draw_sensor_data(point_cloud)
+
+        Braitenberg_command = command
+
+        # 4. move with CNN and Braitenberg
+        self.robot.vl = (CNN_command[0] + Braitenberg_command[0]) / 2
+        self.robot.vr = (CNN_command[1] + Braitenberg_command[1]) / 2
+        self.robot.kinematics(SPEED / 10)
+
+        # update display
+        pygame.display.update()
+
+        # check if game over
+        if distance(self.robot, self.target) < 40:
+            game_over = True
+            return game_over
+
     def _move(self, action):
         speed = 0.1
         if np.array_equal(action, [1, 0, 0, 0, 0]):
@@ -133,6 +174,22 @@ class RobotGame:
             self.robot.vr += speed
         elif np.array_equal(action, [0, 0, 0, 1, 0]):
             self.robot.vr -= speed
+        # print(self.robot.vl, self.robot.vr)
+
+    def _move2(self, action):
+        # return the modified velocity of the robot
+        speed = 0.1
+        if np.array_equal(action, [1, 0, 0, 0, 0]):
+            return [speed, 0]
+        elif np.array_equal(action, [0, 1, 0, 0, 0]):
+            return [-speed, 0]
+        elif np.array_equal(action, [0, 0, 1, 0, 0]):
+            return [0, speed]
+        elif np.array_equal(action, [0, 0, 0, 1, 0]):
+            return [0, -speed]
+        else:
+            return [0, 0]
+
         # print(self.robot.vl, self.robot.vr)
 
     def _update_ui(self):

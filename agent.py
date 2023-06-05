@@ -1,5 +1,4 @@
-from math import inf
-from math import atan2
+from math import inf, atan2, radians
 import torch
 import random
 import numpy as np
@@ -166,7 +165,29 @@ def train():
             plot(plot_scores, plot_mean_scores)
 
 
+def start():
+    agent = Agent()
+    game = RobotGame()
+    sensor_range = 200, radians(60)
+    # ultrasonic = UltraSonic(sensor_range, game.map)
+    while True:
+        # get state
+        state = agent.get_state(game)
+
+        # get move
+        final_move = agent.get_action(state)
+        done = game.play_step2(final_move)
+
+        if done:
+            game.reset()
+            agent.n_games += 1
+
+
 if __name__ == "__main__":
-    train()
-    # plot(plot_scores, plot_mean_scores)
+    # Si l'on veut entainer le robot
+    # train()
+
+    # si l'on veut tester le robot
+    start()
+    print("oui")
     pass
